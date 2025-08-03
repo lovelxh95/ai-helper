@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI助手 - 管理后台</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/element-plus/dist/index.full.js"></script>
+    <script src="https://unpkg.com/@element-plus/icons-vue/dist/index.iife.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', '微软雅黑', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .admin-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .content-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        .tab-content {
+            margin-top: 20px;
+        }
+        .status-tag {
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="admin-container">
+            <!-- 头部 -->
+            <div class="header">
+                <div>
+                    <h1 style="margin: 0; color: #333;">AI助手管理后台</h1>
+                    <p style="margin: 5px 0 0 0; color: #666;">系统配置与用户管理</p>
+                </div>
+                <div>
+                    <el-button @click="logout" type="danger">退出登录</el-button>
+                </div>
+            </div>
+
+            <!-- 主要内容 -->
+            <div class="content-card">
+                <el-tabs v-model="activeTab" type="border-card">
+                    <!-- API服务商管理 -->
+                    <el-tab-pane label="API服务商" name="providers">
+                        <div class="tab-content">
+                            <div style="margin-bottom: 20px;">
+                                <el-button type="primary" @click="showProviderDialog = true">添加服务商</el-button>
+                            </div>
+                            <el-table :data="providers" style="width: 100%">
+                                <el-table-column prop="name" label="服务商名称" width="150"></el-table-column>
+                                <el-table-column prop="base_url" label="API地址" min-width="200"></el-table-column>
+                                <el-table-column prop="description" label="描述" min-width="150"></el-table-column>
+                                <el-table-column prop="status" label="状态" width="80">
+                                    <template #default="scope">
+                                        <el-tag :type="scope.row.status === 1 ? 'success' : 'danger'" class="status-tag">
+                                            {{ scope.row.status === 1 ? '启用' : '禁用' }}
+                                        </el-tag>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column prop="create_time" label="创建时间" width="160"></el-table-column>
+                                <el-table-column label="操作" width="150">
+                                    <template #default="scope">
+                                        <el-button size="small" @click="editProvider(scope.row)">编辑</el-button>
+                                        <el-button size="small" type="danger" @click="deleteProvider(scope.row.id)">删除</el-button>
+                                    </template>
+                                </el-table-column>
+                            </el-table>
+                        </div>
+                    </el-tab-pane>
+
+                    <!-- 模型配置管理 -->
+                    <el-tab-pane label="模型配置" name="models">
+                        <div class="tab-content">
+                            <div style="margin-bottom: 20px;">
+                                <el-button type="primary" @click="showModelDialog = true">添加模型</el-button>
+                            </div>
+                            <el-table :data="models" style="width: 100%">
+                                <el-table-column prop="model_name" label="模型名称" width="200"></el-table-column>
+                                <el-table-column prop="model_id" label="模型ID" min-width="200"></el-table-column>
+                                <el-table-column prop="provider_name" label="服务商" width="120"></el-table-column>
+                                <el-table-column prop="max_tokens" label="最大Token" width="100"></el-table-column>
+                                <el-table-column prop="sort_order" label="排序" width="80"></el-table-column>
+                                <el-table-column prop="status" label="状态" width="80">
+                                    <template #default="scope">
+                                        <el-tag :type="scope.row.status === 1 ? 'success' : 'danger'" class="status-tag">
+                                            {{ scope.row.status === 1 ? '启用' : '禁用' }}
+                                        </el-tag>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column label="操作" width="150">
+                                    <template #default="scope">
+                                        <el-button size="small" @click="editModel(scope.row)">编辑</el-button>
+                                        <el-button size="small" type="danger" @click="deleteModel(scope.row.id)">删除</el-button>
+                                    </template>
+                                </el-table-column>
+                            </el-table>
+                        </div>
+                    </el-tab-pane>
+
+                    <!-- 用户管理 -->
+                    <el-tab-pane label="用户管理" name="users">
+                        <div class="tab-content">
+                            <el-table :data="users" style="width: 100%">
+                                <el-table-column prop="username" label="用户名" width="150"></el-table-column>
+                                <el-table-column prop="message_count" label="消息数" width="100"></el-table-column>
+                                <el-table-column prop="status" label="状态" width="80">
+                                    <template #default="scope">
+                                        <el-tag :type="scope.row.status === 1 ? 'success' : 'danger'" class="status-tag">
+                                            {{ scope.row.status === 1 ? '正常' : '禁用' }}
+                                        </el-tag>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column prop="is_admin" label="管理员" width="80">
+                                    <template #default="scope">
+                                        <el-tag :type="scope.row.is_admin === 1 ? 'warning' : 'info'" class="status-tag">
+                                            {{ scope.row.is_admin === 1 ? '是' : '否' }}
+                                        </el-tag>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column prop="create_time" label="注册时间" width="160"></el-table-column>
+                                <el-table-column prop="last_login" label="最后登录" width="160"></el-table-column>
+                                <el-table-column label="操作" width="150">
+                                    <template #default="scope">
+                                        <el-button size="small" @click="editUser(scope.row)">编辑</el-button>
+                                        <el-button size="small" type="danger" @click="deleteUser(scope.row.id)">删除</el-button>
+                                    </template>
+                                </el-table-column>
+                            </el-table>
+                        </div>
+                    </el-tab-pane>
+                </el-tabs>
+            </div>
+        </div>
+
+        <!-- API服务商对话框 -->
+        <el-dialog v-model="showProviderDialog" :title="editingProvider ? '编辑服务商' : '添加服务商'" width="500px">
+            <el-form :model="providerForm" label-width="100px">
+                <el-form-item label="服务商名称">
+                    <el-input v-model="providerForm.name" placeholder="请输入服务商名称"></el-input>
+                </el-form-item>
+                <el-form-item label="API地址">
+                    <el-input v-model="providerForm.base_url" placeholder="请输入API基础URL"></el-input>
+                </el-form-item>
+                <el-form-item label="API密钥">
+                    <el-input v-model="providerForm.api_key" type="password" placeholder="请输入API密钥"></el-input>
+                </el-form-item>
+                <el-form-item label="描述">
+                    <el-input v-model="providerForm.description" type="textarea" placeholder="请输入描述"></el-input>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="showProviderDialog = false">取消</el-button>
+                <el-button type="primary" @click="saveProvider">保存</el-button>
+            </template>
+        </el-dialog>
+
+        <!-- 模型配置对话框 -->
+        <el-dialog v-model="showModelDialog" :title="editingModel ? '编辑模型' : '添加模型'" width="500px">
+            <el-form :model="modelForm" label-width="100px">
+                <el-form-item label="服务商">
+                    <el-select v-model="modelForm.provider_id" placeholder="请选择服务商">
+                        <el-option v-for="provider in providers" :key="provider.id" :label="provider.name" :value="provider.id"></el-option>
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="模型ID">
+                    <el-input v-model="modelForm.model_id" placeholder="请输入模型ID"></el-input>
+                </el-form-item>
+                <el-form-item label="模型名称">
+                    <el-input v-model="modelForm.model_name" placeholder="请输入模型显示名称"></el-input>
+                </el-form-item>
+                <el-form-item label="最大Token">
+                    <el-input-number v-model="modelForm.max_tokens" :min="1" :max="100000"></el-input-number>
+                </el-form-item>
+                <el-form-item label="排序权重">
+                    <el-input-number v-model="modelForm.sort_order" :min="0"></el-input-number>
+                </el-form-item>
+                <el-form-item label="描述">
+                    <el-input v-model="modelForm.description" type="textarea" placeholder="请输入描述"></el-input>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="showModelDialog = false">取消</el-button>
+                <el-button type="primary" @click="saveModel">保存</el-button>
+            </template>
+        </el-dialog>
+
+        <!-- 用户编辑对话框 -->
+        <el-dialog v-model="showUserDialog" title="编辑用户" width="400px">
+            <el-form :model="userForm" label-width="100px">
+                <el-form-item label="用户名">
+                    <el-input v-model="userForm.username" disabled></el-input>
+                </el-form-item>
+                <el-form-item label="状态">
+                    <el-select v-model="userForm.status">
+                        <el-option label="正常" :value="1"></el-option>
+                        <el-option label="禁用" :value="0"></el-option>
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="管理员">
+                    <el-select v-model="userForm.is_admin">
+                        <el-option label="否" :value="0"></el-option>
+                        <el-option label="是" :value="1"></el-option>
+                    </el-select>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="showUserDialog = false">取消</el-button>
+                <el-button type="primary" @click="saveUser">保存</el-button>
+            </template>
+        </el-dialog>
+    </div>
+
+    <script src="static/admin.js"></script>
+</body>
+</html>

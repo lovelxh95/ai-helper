@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI助手</title>
+    <!-- 外部依赖 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/element-plus@2.4.4/dist/index.full.js"></script>
+    <script src="https://unpkg.com/@element-plus/icons-vue@2.1.0/dist/index.iife.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus@2.4.4/dist/index.css">
+    <script src="https://unpkg.com/marked@9.1.6/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <!-- 本地样式文件 -->
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- 登录注册页面 -->
+        <div v-if="!isLoggedIn" class="login-container">
+            <div class="login-box">
+                <h2 style="text-align: center; margin-bottom: 30px; color: #303133;">{{ isLogin ? 'AI助手登录' : 'AI助手注册' }}</h2>
+                <el-form :model="loginForm" :rules="loginRules" ref="loginFormRef">
+                    <el-form-item prop="username">
+                        <el-input v-model="loginForm.username" placeholder="用户名" size="large">
+                            <template #prefix>
+                                <el-icon><User /></el-icon>
+                            </template>
+                        </el-input>
+                    </el-form-item>
+                    <el-form-item prop="password">
+                        <el-input v-model="loginForm.password" type="password" placeholder="密码" size="large" @keyup.enter="handleLogin">
+                            <template #prefix>
+                                <el-icon><Lock /></el-icon>
+                            </template>
+                        </el-input>
+                    </el-form-item>
+                    <el-form-item>
+                        <el-button type="primary" size="large" style="width: 100%;" @click="handleLogin" :loading="loginLoading">
+                            {{ isLogin ? '登录' : '注册' }}
+                        </el-button>
+                    </el-form-item>
+                </el-form>
+                <div style="text-align: center; margin-top: 20px;">
+                    <el-link @click="isLogin = !isLogin">
+                        {{ isLogin ? '没有账号？立即注册' : '已有账号？立即登录' }}
+                    </el-link>
+                </div>
+            </div>
+        </div>
+
+        <!-- 聊天页面 -->
+        <div v-else class="chat-container">
+            <!-- 侧边栏 -->
+            <div class="sidebar">
+                <div class="sidebar-header">
+                    <el-button type="primary" style="width: 100%; margin-bottom: 15px;" @click="startNewChat">
+                        新建对话
+                    </el-button>
+                    <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 15px;">
+                        <span style="font-weight: bold;">对话历史</span>
+                        <el-tag v-if="isDateFiltered" type="success" size="small" style="margin-left: 8px;">已筛选</el-tag>
+                    </div>
+                    <!-- 时间范围筛选 -->
+                    <div style="margin-bottom: 15px;">
+                        <el-collapse v-model="dateFilterCollapse">
+                            <el-collapse-item title="按时间筛选" name="1">
+                                <div style="margin-bottom: 10px;">
+                                    <el-date-picker
+                                        v-model="dateRange"
+                                        type="datetimerange"
+                                        range-separator="至"
+                                        start-placeholder="开始时间"
+                                        end-placeholder="结束时间"
+                                        format="YYYY-MM-DD HH:mm"
+                                        value-format="YYYY-MM-DD HH:mm:ss"
+                                        size="small"
+                                        style="width: 100%;"
+                                    />
+                                </div>
+                                <div style="display: flex; gap: 5px;">
+                                    <el-button type="primary" size="small" @click="searchByDateRange" style="flex: 1;">
+                                        搜索
+                                    </el-button>
+                                    <el-button size="small" @click="clearDateFilter" style="flex: 1;">
+                                        清除
+                                    </el-button>
+                                </div>
+                            </el-collapse-item>
+                        </el-collapse>
+                    </div>
+                </div>
+                <div class="sidebar-content">
+                    <div v-for="session in sessions" :key="session.session_id" 
+                         class="session-item" 
+                         :class="{ active: currentSessionId === session.session_id }">
+                        <div @click="loadSession(session.session_id)" style="flex: 1; cursor: pointer;">
+                            <div style="font-weight: bold; margin-bottom: 5px;">{{ session.title || session.preview || '新对话' }}</div>
+                            <div style="font-size: 11px; color: #909399; margin-bottom: 3px;">{{ session.model_id }}</div>
+                            <div style="font-size: 10px; color: #c0c4cc;">{{ formatTime(session.update_time || session.create_time) }}</div>
+                        </div>
+                        <el-button 
+                            type="danger" 
+                            size="small" 
+                            :icon="Delete" 
+                            circle 
+                            @click.stop="deleteSession(session.session_id)"
+                            style="margin-left: 8px; flex-shrink: 0;">
+                        </el-button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 主聊天区域 -->
+            <div class="chat-main">
+                <div class="chat-header">
+                    <h3 style="margin: 0;">AI助手</h3>
+                    <div style="display: flex; align-items: center; gap: 20px;">
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <el-dropdown @command="handleAvatarCommand">
+                                <div class="user-avatar-container">
+                                    <img :src="userInfo.avatar" alt="用户头像" class="user-avatar">
+                                    <div class="avatar-overlay">
+                                        <span>点击操作</span>
+                                    </div>
+                                </div>
+                                <template #dropdown>
+                                    <el-dropdown-menu>
+                                        <el-dropdown-item command="changeAvatar">
+                                            <el-icon><Picture /></el-icon>
+                                            修改图片
+                                        </el-dropdown-item>
+                                        <el-dropdown-item command="logout" divided>
+                                            <el-icon><SwitchButton /></el-icon>
+                                            退出登录
+                                        </el-dropdown-item>
+                                    </el-dropdown-menu>
+                                </template>
+                            </el-dropdown>
+                            <input type="file" ref="avatarInput" @change="handleAvatarUpload" accept="image/*" style="display: none;">
+                            <div style="font-size: 14px; color: #606266;">
+                                <span style="font-weight: bold;">{{ userInfo.username }}</span>
+                                <span style="margin-left: 10px;">已发送 {{ userInfo.message_count }} 条消息</span>
+                            </div>
+                        </div>
+                        <el-select v-model="currentModel" placeholder="选择模型" style="width: 250px;">
+                            <el-option-group v-for="(models, providerName) in providers" :key="String(providerName)" :label="String(providerName)">
+                                <el-option v-for="model in models" :key="model.model_id" :label="model.model_name" :value="model.model_id"></el-option>
+                            </el-option-group>
+                        </el-select>
+                    </div>
+                </div>
+
+                <div class="chat-messages" ref="messagesContainer">
+                    <div v-for="(message, index) in messages" :key="index" class="message" :class="message.role">
+                        <div class="message-avatar">
+                            <img v-if="message.role === 'user'" :src="userInfo.avatar" alt="用户头像" class="avatar">
+                            <img v-else src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMjAiIGN5PSIyMCIgcj0iMjAiIGZpbGw9IiM0MDlFRkYiLz4KPHN2ZyB4PSI4IiB5PSI4IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSI+CjxwYXRoIGQ9Ik0xMiAyQzEzLjEgMiAxNCAyLjkgMTQgNEMxNCA1LjEgMTMuMSA2IDEyIDZDMTAuOSA2IDEwIDUuMSAxMCA0QzEwIDIuOSAxMC45IDIgMTIgMlpNMjEgOVYyMkgxNVYxM0g5VjIySDNWOUMzIDguNDUgMy40NSA4IDQgOEgyMEMyMC41NSA4IDIxIDguNDUgMjEgOVoiIGZpbGw9IndoaXRlIi8+Cjwvc3ZnPgo8L3N2Zz4K" alt="AI头像" class="avatar">
+                        </div>
+                        <div class="message-content" v-html="renderMarkdown(message.content)">
+                        </div>
+                    </div>
+                    <div v-if="isTyping" class="message assistant">
+                        <div class="message-avatar">
+                            <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMjAiIGN5PSIyMCIgcj0iMjAiIGZpbGw9IiM0MDlFRkYiLz4KPHN2ZyB4PSI4IiB5PSI4IiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSI+CjxwYXRoIGQ9Ik0xMiAyQzEzLjEgMiAxNCAyLjkgMTQgNEMxNCA1LjEgMTMuMSA2IDEyIDZDMTAuOSA2IDEwIDUuMSAxMCA0QzEwIDIuOSAxMC45IDIgMTIgMlpNMjEgOVYyMkgxNVYxM0g5VjIySDNWOUMzIDguNDUgMy40NSA4IDQgOEgyMEMyMC41NSA4IDIxIDguNDUgMjEgOVoiIGZpbGw9IndoaXRlIi8+Cjwvc3ZnPgo8L3N2Zz4K" alt="AI头像" class="avatar">
+                        </div>
+                        <div class="message-content typing-indicator">
+                            AI正在思考
+                            <div class="typing-dots">
+                                <div class="typing-dot"></div>
+                                <div class="typing-dot"></div>
+                                <div class="typing-dot"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chat-input">
+                    <div class="input-area">
+                        <el-input v-model="inputMessage" 
+                                type="textarea" 
+                                :rows="3" 
+                                placeholder="输入您的问题..." 
+                                @keyup.ctrl.enter="sendMessage"
+                                :disabled="isTyping"
+                                style="flex: 1;">
+                        </el-input>
+                        <el-button type="primary" @click="sendMessage" :loading="isTyping" :disabled="!inputMessage.trim()">
+                            发送
+                        </el-button>
+                    </div>
+                    <div style="margin-top: 10px; font-size: 12px; color: #909399; text-align: center;">
+                        按 Ctrl + Enter 快速发送
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 本地JavaScript文件 -->
+    <script src="/static/script.js"></script>
+</body>
+</html>
